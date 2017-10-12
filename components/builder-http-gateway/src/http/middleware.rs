@@ -128,10 +128,12 @@ impl Authenticated {
 
     fn authenticate(&self, req: &mut Request, token: SessionToken) -> IronResult<Session> {
         let mut request = SessionGet::new();
+        debug!("******************* HAHA token = {:?}", &token);
         request.set_token(token);
         let conn = req.extensions.get_mut::<XRouteClient>().unwrap();
         match conn.route::<SessionGet, Session>(&request) {
             Ok(session) => {
+                debug!("******************* HAHA found a session = {:?}", &session);
                 self.validate_session(&session)?;
                 Ok(session)
             }
@@ -173,7 +175,13 @@ impl BeforeMiddleware for Authenticated {
 
         let session = {
             if let Ok(decoded_token) = base64::decode(&token) {
+                // this will succeed if you pass a GH auth token, even tho those aren't b64 encoded
+                debug!(
+                    "******************* HAHA decoded token = {:?}",
+                    &decoded_token
+                );
                 if let Ok(token) = message::decode(&decoded_token) {
+                    debug!("******************* HAHA token 2 = {:?}", &token);
                     self.authenticate(req, token)?
                 } else {
                     // TODO: Replace temporary auth workaround
@@ -181,9 +189,11 @@ impl BeforeMiddleware for Authenticated {
                     // Check to see if this is a valid github token, and create (or
                     // update) a session. This is a temporary fix until we can roll out
                     // and migrate clients to our own personal access tokens.
+                    debug!("******************* HAHA token 3 = {:?}", &token);
                     session_create_github(req, token)?
                 }
             } else {
+                debug!("******************* HAHA decoding didn't work");
                 let err = NetError::new(ErrCode::BAD_TOKEN, "net:auth:3");
                 return Err(IronError::new(err, Status::Forbidden));
             }

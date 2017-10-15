@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Chef Software Inc. and/or applicable contributors
+// Copyright (c) 2016 Chef Software Inc. and/or applicable contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -96,8 +96,8 @@ impl Dispatcher for JobSrv {
         router_pipe: Arc<String>,
     ) -> Result<<Self::State as AppState>::InitState> {
         let state = InitServerState::new(config.clone(), router_pipe.clone())?;
-        state.datastore.setup()?;
-        state.datastore.start_async();
+        // state.datastore.setup()?;
+        // state.datastore.start_async();
         LogIngester::start(&config, state.log_dir.clone(), state.datastore.clone())?;
         let conn = RouteClient::new()?;
         conn.connect(&*router_pipe)?;

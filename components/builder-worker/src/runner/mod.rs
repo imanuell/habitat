@@ -387,8 +387,8 @@ impl RunnerCli {
     }
 
     /// Send a message to the Job Runner
-    pub fn send(&mut self, msg: &zmq::Message) -> Result<()> {
-        self.sock.send(&*msg, 0)?;
+    pub fn send(&mut self, msg: &proto::Job) -> Result<()> {
+        self.sock.send(&message::encode(msg).unwrap(), 0)?;
         Ok(())
     }
 }

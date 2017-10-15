@@ -27,7 +27,9 @@ use sharding::InstaId;
 
 pub use message::jobsrv::*;
 
-pub const GITHUB_PUSH_NOTIFY_ID: u64 = 23;
+pub const DEFAULT_WORKER_PORT: u16 = 5566;
+pub const DEFAULT_LOG_PORT: u16 = 5568;
+pub const PING_INTERVAL_MS: i64 = 30_000;
 
 #[derive(Debug)]
 pub enum Error {
@@ -61,6 +63,22 @@ impl Into<Job> for JobSpec {
             job.set_channel(self.take_channel());
         }
         job
+    }
+}
+
+impl Routable for Disconnect {
+    type H = u64;
+
+    fn route_key(&self) -> Option<Self::H> {
+        None
+    }
+}
+
+impl Routable for Heartbeat {
+    type H = u64;
+
+    fn route_key(&self) -> Option<Self::H> {
+        None
     }
 }
 

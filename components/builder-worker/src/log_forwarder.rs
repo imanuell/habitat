@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Chef Software Inc. and/or applicable contributors
+// Copyright (c) 2016 Chef Software Inc. and/or applicable contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ pub struct LogForwarder {
     pub output_sock: zmq::Socket,
     /// Log file for debugging this process.
     logger: Logger,
+    log_addr: String,
 }
 
 impl LogForwarder {
@@ -49,16 +50,16 @@ impl LogForwarder {
             intake_sock: intake_sock,
             output_sock: output_sock,
             logger: logger,
+            log_addr: config.log_addr(),
         })
     }
 
     pub fn start(config: &Config) -> Result<JoinHandle<()>> {
         let (tx, rx) = mpsc::sync_channel(0);
         let mut log = Self::new(config).unwrap();
-        let jobsrv_addrs = config.jobsrv_addrs();
         let handle = thread::Builder::new()
             .name("log".to_string())
-            .spawn(move || { log.run(tx, jobsrv_addrs).unwrap(); })
+            .spawn(move || { log.run(tx).unwrap(); })
             .unwrap();
         match rx.recv() {
             Ok(()) => Ok(handle),
@@ -66,18 +67,9 @@ impl LogForwarder {
         }
     }
 
-    pub fn run(
-        &mut self,
-        rz: mpsc::SyncSender<()>,
-        addrs: Vec<(String, String, String)>,
-    ) -> Result<()> {
-        if addrs.len() == 1 {
-            let (_, _, ref log) = addrs[0];
-            println!("Connecting to Job Server Log port, {}", log);
-            self.output_sock.connect(&log)?;
-        } else {
-            warn!("Routing logs to more than one Job Server is not yet implemented");
-        }
+    pub fn run(&mut self, rz: mpsc::SyncSender<()>) -> Result<()> {
+        println!("Connecting to Job Server Log port, {}", self.log_addr);
+        self.output_sock.connect(&self.log_addr)?;
 
         self.logger.log("Startup complete");
         self.intake_sock.bind(INPROC_ADDR)?;
@@ -91,9 +83,6 @@ impl LogForwarder {
         self.logger.log(
             "Starting proxy between log_pipe and jobsrv",
         );
-
-        // If we ever have multiple JobServers these need to be sent to, then we might need some
-        // additional logic.
         if let Err(e) = zmq::proxy(&mut self.intake_sock, &mut self.output_sock) {
             self.logger.log(
                 format!("ZMQ proxy returned an error: {:?}", e)

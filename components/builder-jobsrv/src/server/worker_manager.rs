@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Chef Software Inc. and/or applicable contributors
+// Copyright (c) 2016 Chef Software Inc. and/or applicable contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -138,22 +138,19 @@ pub struct WorkerMgr {
     datastore: DataStore,
     key_dir: PathBuf,
     route_conn: RouteClient,
-    hb_sock: zmq::Socket,
     rq_sock: zmq::Socket,
     work_mgr_sock: zmq::Socket,
     msg: zmq::Message,
     workers: LinkedHashMap<String, Worker>,
-    worker_command: String,
-    worker_heartbeat: String,
+    worker_listen_addr: String,
 }
 
 impl WorkerMgr {
     pub fn new(cfg: &Config, datastore: DataStore, route_conn: RouteClient) -> Result<Self> {
-        let hb_sock = (**DEFAULT_CONTEXT).as_mut().socket(zmq::SUB)?;
         let rq_sock = (**DEFAULT_CONTEXT).as_mut().socket(zmq::ROUTER)?;
         let work_mgr_sock = (**DEFAULT_CONTEXT).as_mut().socket(zmq::DEALER)?;
         rq_sock.set_router_mandatory(true)?;
-        hb_sock.set_subscribe(&[])?;
+        rq_sock.set_probe_router(true)?;
         work_mgr_sock.set_rcvhwm(1)?;
         work_mgr_sock.set_linger(0)?;
         work_mgr_sock.set_immediate(true)?;
@@ -161,13 +158,11 @@ impl WorkerMgr {
             datastore: datastore,
             key_dir: cfg.key_dir.clone(),
             route_conn: route_conn,
-            hb_sock: hb_sock,
             rq_sock: rq_sock,
             work_mgr_sock: work_mgr_sock,
             msg: zmq::Message::new()?,
             workers: LinkedHashMap::new(),
-            worker_command: cfg.net.worker_command_addr(),
-            worker_heartbeat: cfg.net.worker_heartbeat_addr(),
+            worker_listen_addr: cfg.net.worker_addr(),
         })
     }
 
@@ -186,11 +181,8 @@ impl WorkerMgr {
 
     fn run(&mut self, rz: mpsc::SyncSender<()>) -> Result<()> {
         self.work_mgr_sock.bind(WORKER_MGR_ADDR)?;
-        println!("Listening for commands on {}", self.worker_command);
-        self.rq_sock.bind(&self.worker_command)?;
-        println!("Listening for heartbeats on {}", self.worker_heartbeat);
-        self.hb_sock.bind(&self.worker_heartbeat)?;
-        let mut hb_sock = false;
+        println!("Listening for commands on {}", self.worker_listen_addr);
+        self.rq_sock.bind(&self.worker_listen_addr)?;
         let mut rq_sock = false;
         let mut work_mgr_sock = false;
         let mut process_work = false;
@@ -201,33 +193,26 @@ impl WorkerMgr {
         // Load busy worker state
         self.load_workers()?;
 
-        info!("builder-jobsrv is ready to go.");
         loop {
             {
                 let mut items = [
-                    self.hb_sock.as_poll_item(1),
                     self.rq_sock.as_poll_item(1),
                     self.work_mgr_sock.as_poll_item(1),
                 ];
 
                 zmq::poll(&mut items, DEFAULT_POLL_TIMEOUT_MS as i64)?;
                 if (items[0].get_revents() & zmq::POLLIN) > 0 {
-                    hb_sock = true;
-                }
-                if (items[1].get_revents() & zmq::POLLIN) > 0 {
                     rq_sock = true;
                 }
-                if (items[2].get_revents() & zmq::POLLIN) > 0 {
+                if (items[1].get_revents() & zmq::POLLIN) > 0 {
                     work_mgr_sock = true;
                 }
             }
 
-            if hb_sock {
-                self.process_heartbeat()?;
-                hb_sock = false;
-            }
             self.expire_workers()?;
             if rq_sock {
+                // check if this is a hearbeat
+                // self.process_heartbeat()?;
                 self.process_job_status()?;
                 rq_sock = false;
             }
@@ -490,7 +475,7 @@ impl WorkerMgr {
     }
 
     fn process_heartbeat(&mut self) -> Result<()> {
-        self.hb_sock.recv(&mut self.msg, 0)?;
+        // self.hb_sock.recv(&mut self.msg, 0)?;
         let heartbeat: jobsrv::Heartbeat = parse_from_bytes(&self.msg)?;
         debug!("Got heartbeat: {:?}", heartbeat);
 

@@ -10,10 +10,7 @@ features_enabled = "{{cfg.features_enabled}}"
 app_private_key = "{{pkg.svc_files_path}}/builder-github-app.pem"
 {{toToml cfg.github}}
 
-{{~#eachAlive bind.jobsrv.members as |member|}}
-[[jobsrv]]
-host = "{{member.sys.ip}}"
-port = {{member.cfg.worker_port}}
-heartbeat = {{member.cfg.worker_heartbeat}}
-log_port = {{member.cfg.log_port}}
-{{~/eachAlive}}
+[jobsrv]
+host = "{{bind.jobsrv.first.sys.ip}}"
+port = {{bind.jobsrv.first.cfg.worker_port}}
+log_port = {{bind.jobsrv.first.cfg.log_port}}

@@ -23,10 +23,14 @@ enum JobState {
   Dispatched = 5;
 }
 
+message Disconnect {}
+
 message Heartbeat {
-  optional string endpoint = 1;
   optional Os os = 2;
   optional WorkerState state = 3;
+
+  reserved "endpoint";
+  reserved 1;
 }
 
 message BusyWorker {

@@ -45,7 +45,6 @@ extern crate hyper;
 
 pub mod config;
 pub mod error;
-pub mod heartbeat;
 pub mod log_forwarder;
 pub mod runner;
 pub mod server;

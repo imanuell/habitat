@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Chef Software Inc. and/or applicable contributors
+// Copyright (c) 2016 Chef Software Inc. and/or applicable contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,10 +20,9 @@ use std::path::PathBuf;
 use github_api_client::config::GitHubCfg;
 use hab_core::config::ConfigFile;
 use hab_core::url;
+use protocol::jobsrv::{DEFAULT_LOG_PORT, DEFAULT_WORKER_PORT};
 
 use error::Error;
-
-pub type JobSrvCfg = Vec<JobSrvAddr>;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
@@ -50,15 +49,12 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn jobsrv_addrs(&self) -> Vec<(String, String, String)> {
-        let mut addrs = vec![];
-        for job_server in &self.jobsrv {
-            let hb = format!("tcp://{}:{}", job_server.host, job_server.heartbeat);
-            let queue = format!("tcp://{}:{}", job_server.host, job_server.port);
-            let log = format!("tcp://{}:{}", job_server.host, job_server.log_port);
-            addrs.push((hb, queue, log));
-        }
-        addrs
+    pub fn log_addr(&self) -> String {
+        format!("tcp://{}:{}", self.jobsrv.host, self.jobsrv.log_port)
+    }
+
+    pub fn queue_addr(&self) -> String {
+        format!("tcp://{}:{}", self.jobsrv.host, self.jobsrv.port)
     }
 }
 
@@ -71,7 +67,7 @@ impl Default for Config {
             log_path: PathBuf::from("/tmp"),
             bldr_channel: String::from("unstable"),
             bldr_url: url::default_bldr_url(),
-            jobsrv: vec![JobSrvAddr::default()],
+            jobsrv: JobSrvCfg::default(),
             features_enabled: "".to_string(),
             github: GitHubCfg::default(),
         }
@@ -84,20 +80,18 @@ impl ConfigFile for Config {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
-pub struct JobSrvAddr {
+pub struct JobSrvCfg {
     pub host: IpAddr,
     pub port: u16,
-    pub heartbeat: u16,
     pub log_port: u16,
 }
 
-impl Default for JobSrvAddr {
+impl Default for JobSrvCfg {
     fn default() -> Self {
-        JobSrvAddr {
+        JobSrvCfg {
             host: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            port: 5566,
-            heartbeat: 5567,
-            log_port: 5568,
+            port: DEFAULT_WORKER_PORT,
+            log_port: DEFAULT_LOG_PORT,
         }
     }
 }
@@ -114,13 +108,7 @@ mod tests {
         log_path = "/path/to/logs"
         features_enabled = "FOO,BAR"
 
-        [[jobsrv]]
-        host = "1:1:1:1:1:1:1:1"
-        port = 9000
-        heartbeat = 9001
-        log_port = 9021
-
-        [[jobsrv]]
+        [jobsrv]
         host = "2.2.2.2"
         port = 9000
         "#;
@@ -129,13 +117,9 @@ mod tests {
         assert_eq!(&config.auth_token, "mytoken");
         assert_eq!(&format!("{}", config.data_path.display()), "/path/to/data");
         assert_eq!(&format!("{}", config.log_path.display()), "/path/to/logs");
-        assert_eq!(&format!("{}", config.jobsrv[0].host), "1:1:1:1:1:1:1:1");
-        assert_eq!(config.jobsrv[0].port, 9000);
-        assert_eq!(config.jobsrv[0].heartbeat, 9001);
-        assert_eq!(config.jobsrv[0].log_port, 9021);
-        assert_eq!(&format!("{}", config.jobsrv[1].host), "2.2.2.2");
-        assert_eq!(config.jobsrv[1].port, 9000);
-        assert_eq!(config.jobsrv[1].heartbeat, 5567);
+        assert_eq!(&format!("{}", config.jobsrv.host), "1:1:1:1:1:1:1:1");
+        assert_eq!(config.jobsrv.port, 9000);
+        assert_eq!(config.jobsrv.log_port, 9021);
         assert_eq!(&config.features_enabled, "FOO,BAR");
     }
 }

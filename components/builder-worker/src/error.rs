@@ -19,6 +19,7 @@ use std::result;
 
 use bldr_core;
 use hab_core;
+use hab_net;
 use git2;
 use github_api_client;
 use protobuf;
@@ -34,6 +35,7 @@ pub enum Error {
     BuildFailure(i32),
     BuilderCore(bldr_core::Error),
     CannotAddCreds,
+    ConnErr(hab_net::conn::ConnErr),
     Git(git2::Error),
     GithubAppAuthErr(github_api_client::HubError),
     HabitatCore(hab_core::Error),
@@ -58,6 +60,7 @@ impl fmt::Display for Error {
             }
             Error::BuilderCore(ref e) => format!("{}", e),
             Error::CannotAddCreds => format!("Cannot add credentials to url"),
+            Error::ConnErr(ref e) => format!("{}", e),
             Error::Git(ref e) => format!("{}", e),
             Error::GithubAppAuthErr(ref e) => format!("{}", e),
             Error::HabitatCore(ref e) => format!("{}", e),
@@ -92,6 +95,7 @@ impl error::Error for Error {
             Error::BuildFailure(_) => "Build studio exited with a non-zero exit code",
             Error::BuilderCore(ref err) => err.description(),
             Error::CannotAddCreds => "Cannot add credentials to url",
+            Error::ConnErr(ref err) => err.description(),
             Error::Git(ref err) => err.description(),
             Error::GithubAppAuthErr(ref err) => err.description(),
             Error::HabitatCore(ref err) => err.description(),
@@ -119,6 +123,12 @@ impl From<bldr_core::Error> for Error {
 impl From<hab_core::Error> for Error {
     fn from(err: hab_core::Error) -> Error {
         Error::HabitatCore(err)
+    }
+}
+
+impl From<hab_net::conn::ConnErr> for Error {
+    fn from(err: hab_net::conn::ConnErr) -> Self {
+        Error::ConnErr(err)
     }
 }
 

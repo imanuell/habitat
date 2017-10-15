@@ -20,6 +20,7 @@ use std::path::PathBuf;
 
 use hab_net::app::config::*;
 use db::config::DataStoreCfg;
+use protocol::jobsrv::{DEFAULT_LOG_PORT, DEFAULT_WORKER_PORT};
 use server::log_archiver::ArchiveBackend;
 
 use error::Error;
@@ -69,13 +70,9 @@ impl ConfigFile for Config {
 #[serde(default)]
 pub struct NetCfg {
     /// Worker Command socket's listening address
-    pub worker_command_listen: IpAddr,
+    pub worker_listen: IpAddr,
     /// Worker Command socket's port
-    pub worker_command_port: u16,
-    /// Worker Heartbeat socket's listening address
-    pub worker_heartbeat_listen: IpAddr,
-    /// Worker Heartbeat socket's port
-    pub worker_heartbeat_port: u16,
+    pub worker_port: u16,
     /// Worker Log Ingestion socket's listening address
     pub log_ingestion_listen: IpAddr,
     /// Worker Log Ingestion socket's port
@@ -83,20 +80,8 @@ pub struct NetCfg {
 }
 
 impl NetCfg {
-    pub fn worker_command_addr(&self) -> String {
-        format!(
-            "tcp://{}:{}",
-            self.worker_command_listen,
-            self.worker_command_port
-        )
-    }
-
-    pub fn worker_heartbeat_addr(&self) -> String {
-        format!(
-            "tcp://{}:{}",
-            self.worker_heartbeat_listen,
-            self.worker_heartbeat_port
-        )
+    pub fn worker_addr(&self) -> String {
+        format!("tcp://{}:{}", self.worker_listen, self.worker_port)
     }
 
     pub fn log_ingestion_addr(&self) -> String {
@@ -111,12 +96,10 @@ impl NetCfg {
 impl Default for NetCfg {
     fn default() -> Self {
         NetCfg {
-            worker_command_listen: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            worker_command_port: 5566,
-            worker_heartbeat_listen: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            worker_heartbeat_port: 5567,
+            worker_listen: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+            worker_port: DEFAULT_WORKER_PORT,
             log_ingestion_listen: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            log_ingestion_port: 5568,
+            log_ingestion_port: DEFAULT_LOG_PORT,
         }
     }
 }
@@ -137,7 +120,7 @@ pub struct ArchiveCfg {
     pub region: String,
 
     // These are for local log archiving
-    pub local_dir: Option<PathBuf>,
+    pub local_dir: PathBuf,
 }
 
 impl Default for ArchiveCfg {
@@ -151,7 +134,7 @@ impl Default for ArchiveCfg {
             bucket: None,
             region: String::from("us-east-1"),
 
-            local_dir: None,
+            local_dir: PathBuf::from("/tmp"),
         }
     }
 }
@@ -164,10 +147,8 @@ mod tests {
     fn config_from_file() {
         let content = r#"
         [net]
-        worker_command_listen = "1:1:1:1:1:1:1:1"
-        worker_command_port = 9000
-        worker_heartbeat_listen = "1.1.1.1"
-        worker_heartbeat_port = 9000
+        worker_listen = "1:1:1:1:1:1:1:1"
+        worker_port = 9000
         log_ingestion_listen = "2.2.2.2"
         log_ingestion_port = 9999
 
@@ -190,18 +171,10 @@ mod tests {
         "#;
 
         let config = Config::from_raw(&content).unwrap();
-        assert_eq!(
-            &format!("{}", config.net.worker_command_listen),
-            "1:1:1:1:1:1:1:1"
-        );
-        assert_eq!(
-            &format!("{}", config.net.worker_heartbeat_listen),
-            "1.1.1.1"
-        );
+        assert_eq!(&format!("{}", config.net.worker_listen), "1:1:1:1:1:1:1:1");
         assert_eq!(&format!("{}", config.net.log_ingestion_listen), "2.2.2.2");
 
-        assert_eq!(config.net.worker_command_port, 9000);
-        assert_eq!(config.net.worker_heartbeat_port, 9000);
+        assert_eq!(config.net.worker_port, 9000);
         assert_eq!(config.net.log_ingestion_port, 9999);
         assert_eq!(config.datastore.port, 9000);
         assert_eq!(config.datastore.user, "test");

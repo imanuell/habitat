@@ -14,7 +14,7 @@ packages_ and how they might help you.
 
 ## What is a Composite Package?
 
-As the name might suggest, a _composite package_ is a special kind of Habitat package that includes other Habitat packages, specifically _services_. A service is something you would actually run in a Habitat Supervisor: something like [core/redis](https://bldr.habitat.sh/#/pkgs/core/redis/latest), but not a library like, say, [core/linux-headers](https://bldr.habitat.sh/#/pkgs/core/linux-headers/latest). Composite packages allow you to group together services that should be run together on the same Supervisor, enabling you to use the "sidecar" pattern [LINK] with your Habitat services.
+As the name might suggest, a _composite package_ is a special kind of Habitat package that includes other Habitat packages, specifically _services_. A service is something you would actually run in a Habitat Supervisor: something like [core/redis](https://bldr.habitat.sh/#/pkgs/core/redis/latest), but not a library like, say, [core/linux-headers](https://bldr.habitat.sh/#/pkgs/core/linux-headers/latest). Composite packages allow you to group together services that should be run together on the same Supervisor, enabling you to take better advantage of [modern deployment patterns](http://blog.kubernetes.io/2015/06/the-distributed-system-toolkit-patterns.html) with your Habitat services.
 
 ## Why?
 
@@ -57,7 +57,7 @@ port = 8000     # <-- New!
 ```sh
 # plan.sh
 pkg_name=sample-node-app
-pkg_origin=christophermaier
+pkg_origin=cm
 pkg_scaffolding="core/scaffolding-node"
 pkg_version="1.0.1"
 pkg_exports=(
@@ -79,9 +79,9 @@ Here's what our `composite-example-api-proxy` service's `plan.sh` looks like:
 
 ```sh
 pkg_name=composite-example-api-proxy
-pkg_origin=christophermaier
+pkg_origin=cm
 pkg_version="0.1.0"
-pkg_maintainer="The Habitat Maintainers <humans@habitat.sh>"
+pkg_maintainer="Christopher Maier"
 pkg_license=('Apache-2.0')
 pkg_deps=(core/nginx)
 pkg_binds=(
@@ -119,7 +119,7 @@ events {
 
 http {
   upstream backend {
-    server {{bind.http.first.sys.ip}}:{{bind.http.first.cfg.port}};
+    server localhost:{{bind.http.first.cfg.port}};
   }
 
   client_body_temp_path "{{ pkg.svc_var_path }}/client-body";
@@ -144,7 +144,7 @@ http {
 
 This is similar to the configuration file that Chris used in his blog post, but with some differences.
 
-First, we've declared an upstream server named `backend`; this represents our NodeJS server. It is defined in terms of our `http` binding that we declared in our `plan.sh` file. Because of how Habitat works, if we were to change the port our NodeJS application was being served on, our Nginx proxy would be notified, and would rewrite and refresh its configuration appropriately.
+First, we've declared an upstream server named `backend`; this represents our NodeJS server. It is defined in terms of our `http` binding that we declared in our `plan.sh` file. Because of how Habitat works, if we were to change the port our NodeJS application was being served on, our Nginx proxy would be notified, and would rewrite and refresh its configuration appropriately. (Incidentally, notice that the host is hardcoded to "localhost", driving home the fact that this is expected to be running in the same Supervisor as our NodeJS application.)
 
 Second, we define our `server` stanza to function as a proxy to our NodeJS backend. The `listen` value is taken from our proxy application's own configuration, and is the port that the proxy will be serving requests on.
 
@@ -166,18 +166,18 @@ This is exactly the same as the one that Chris used in his blog post. We simply 
 At last, we're ready to wrap all this up into a composite package. As mentioned earlier, composites are just another type of Habitat package, and are made from a `plan.sh` file. This file has a few additional features that we've not seen before, though. Let's take a look at what it would take to wire our NodeJS application up to our Nginx proxy.
 
 ```sh
-pkg_origin="christophermaier"
+pkg_origin="cm"
 pkg_name="composite-example"
 pkg_type="composite"
 pkg_version="0.1.0"
 
 pkg_services=(
-    christophermaier/sample-node-app
-    christophermaier/composite-example-api-proxy
+    cm/sample-node-app
+    cm/composite-example-api-proxy
 )
 
 pkg_bind_map=(
-    [christophermaier/composite-example-api-proxy]="http:christophermaier/sample-node-app"
+    [cm/composite-example-api-proxy]="http:cm/sample-node-app"
 )
 ```
 
@@ -187,22 +187,22 @@ The `pkg_type` field is the simplest; a composite package is recognized as such 
 
 The `pkg_services` array is where you enumerate all the services that are in your composite. Here, we provide the identifiers for our NodeJS application, and for the Nginx proxy we have created.
 
-The final new field, `pkg_bind_map`, is also the most exciting. We have already seen how we are connecting the `http` binding of our Nginx proxy to the exported `port` from our NodeJS application. However, there's no reason that you, the user, should always have to specify this binding on the command line when you start this composite up. It's basically an implementation detail of this particular arrangement of services. It's maybe not be that big of a deal in this particular example, but as you add more services with multiple binds, it really starts to become a challenge. That's where `pkg_bind_map` comes in. This lets you declare all the binding relationships between all the services in the composite. Here we are saying that our `christophermaier/composite-example-api-proxy` has a bind named `http` that is satisfied by the `christophermaier/sample-node-app` service. If our proxy had more than one bind, then we could add more mappings, separated by spaces, like so: `"http:christophermaier/sample-node-app otherbind:other/service-in-the-composite"`.
+The final new field, `pkg_bind_map`, is also the most exciting. We have already seen how we are connecting the `http` binding of our Nginx proxy to the exported `port` from our NodeJS application. However, there's no reason that you, the user, should always have to specify this binding on the command line when you start this composite up. It's basically an implementation detail of this particular arrangement of services. It might not be that big of a deal in this particular example, but as you add more services with multiple binds, it really starts to become a challenge. That's where `pkg_bind_map` comes in. This lets you declare all the binding relationships between all the services in the composite. Here we are saying that our `cm/composite-example-api-proxy` has a bind named `http` that is satisfied by the `cm/sample-node-app` service. If our proxy had more than one bind, then we could add more mappings, separated by spaces, like so: `"http:cm/sample-node-app otherbind:other/service-in-the-composite"`.
 
-A particularly fun part of composites is the fact that build process is intelligent. If you list a package in your `pkg_services` array that isn't actually a service (i.e., it doesn't have a run hook), it will trigger a build error. Additionally, you must also provide at least two services; after all, a composite with a single service isn't providing you anything that the service by itself can't. Finally, you cannot build a composite if it specifies bindings that are not possible. For example, our proxy's `http` bind requires an exported value of `port` to be satisfied (see the proxy's `plan.sh` file above). If our NodeJS application exported a value of `http_port` instead, the composite package's build would fail when it detects this mismatch. This is another example of Habitat's overall philosophy of surfacing errors to the user as quickly as possible. It's much better to discover these kinds of issues at build time than at deploy time.
+A particularly fun part of composites is the fact that the build process is intelligent. If you list a package in your `pkg_services` array that isn't actually a service (i.e., it doesn't have a run hook), it will trigger a build error. Additionally, you must also provide at least two services; after all, a composite with a single service isn't providing you anything that the service by itself can't. Finally, you cannot build a composite if it specifies bindings that are not possible. For example, our proxy's `http` bind requires an exported value of `port` to be satisfied (see the proxy's `plan.sh` file above). If our NodeJS application exported a value of `http_port` instead, the composite package's build would fail when it detects this mismatch. This is another example of Habitat's overall philosophy of surfacing errors to the user as quickly as possible. It's much better to discover these kinds of issues at build time than at deploy time.
 
 ## Using the Composite Package
 
 In many ways, using a composite package is not really different from using a standalone package. Let's see what happens when we try to load a composite package in a Habitat Supervisor.
 
 ```sh
-$ hab svc load christophermaier/composite-example --channel unstable
-» Installing christophermaier/composite-example from channel 'unstable'
-→ Using christophermaier/composite-example/0.1.0/20171005220452
-★ Install of christophermaier/composite-example/0.1.0/20171005220452 complete with 0 new packages installed.
-hab-sup(MN): The christophermaier/composite-example-api-proxy service was successfully loaded
-hab-sup(MN): The christophermaier/sample-node-app service was successfully loaded
-hab-sup(MN): The christophermaier/composite-example composite was successfully loaded
+$ hab svc load cm/composite-example --channel unstable
+» Installing cm/composite-example from channel 'unstable'
+→ Using cm/composite-example/0.1.0/20171005220452
+★ Install of cm/composite-example/0.1.0/20171005220452 complete with 0 new packages installed.
+hab-sup(MN): The cm/composite-example-api-proxy service was successfully loaded
+hab-sup(MN): The cm/sample-node-app service was successfully loaded
+hab-sup(MN): The cm/composite-example composite was successfully loaded
 ```
 
 As we can see, it loads each individual service from the composite for us.
@@ -213,8 +213,8 @@ If we look at our supervisor's output, we can also see these services starting u
 hab-sup(MR): Supervisor Member-ID d6df5da3056146c281d5ccfa27c47efa
 hab-sup(MR): Starting gossip-listener on 0.0.0.0:9638
 hab-sup(MR): Starting http-gateway on 0.0.0.0:9631
-hab-sup(MR): Starting christophermaier/sample-node-app
-hab-sup(MR): Starting christophermaier/composite-example-api-proxy
+hab-sup(MR): Starting cm/sample-node-app
+hab-sup(MR): Starting cm/composite-example-api-proxy
 sample-node-app.default(HK): init, compiled to /hab/svc/sample-node-app/hooks/init
 sample-node-app.default(HK): Hooks compiled
 sample-node-app.default(SR): Hooks recompiled
@@ -261,7 +261,7 @@ composite-example-api-proxy.default(O): 127.0.0.1 - - [06/Oct/2017:14:28:17 +000
 
 Composite packages are a new feature of Habitat, and there may be a few rough edges. The current implementation is intended as a way to explore this problem space for Habitat, but it is not necessarily the _final_ implementation. We are very curious to see how composite packages work (or don't!) for you and your particular use cases.
 
-While you can install, start, stop, load, and unload composite packages, you should keep in mind that composite packages can behave differently from the Habitat packages you are used to. In particular, composite packages are not _quite_ a formal runtime construct of Habitat. The individual services are still available and addressable just as though you'd started them manually. The composite-as-a-whole is not directly addressable as though it were a service in its own right. It cannot not do anything like export selected values from its constituent services as "composite-level exports", or map "composite-level binds" onto constituent service binds. A composite package as a whole does not update itself as an individual service can. Indeed, the constituent services of a composite can continue to update individually.
+While you can install, start, stop, load, and unload composite packages, you should keep in mind that composite packages can behave differently from the Habitat packages you are used to. In particular, composite packages are not _quite_ a formal runtime construct of Habitat. The individual services are still available and addressable just as though you'd started them manually. The composite-as-a-whole is not directly addressable as though it were a service in its own right. It cannot do anything like export selected values from its constituent services as "composite-level exports", or map "composite-level binds" onto constituent service binds. A composite package as a whole does not update itself as an individual service can. Indeed, the constituent services of a composite can continue to update independently of each other.
 
 While each of these potential behaviors are compelling, we're are looking to develop the overall feature of composites iteratively with feedback from our user community. We believe that the feature set we are unveiling is a suitable "first move", and provides a basis from which to discuss further improvements.
 
@@ -270,8 +270,3 @@ Finally, composite package support is available for Linux services only at this 
 ## Conclusion
 
 We're excited to hear what you have to say about composite packages. What worked for you? What do you wish they did differently? How do you think you might use them in your own infrastructure? [Let us know!](http://slack.habitat.sh/)
-
-TODO:
-* add a reconfigure hook for nginx proxy
-* hard-code localhost for the app server? Drive home the colocation part
-* push code to my repository

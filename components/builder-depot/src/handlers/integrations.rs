@@ -29,9 +29,8 @@ use super::super::server::check_origin_access;
 use DepotUtil;
 
 pub fn encrypt(req: &mut Request, content: &str) -> Result<String, Status> {
-    let lock = req.get::<persistent::State<DepotUtil>>().expect(
-        "depot not found",
-    );
+    let lock = req.get::<persistent::State<DepotUtil>>()
+        .expect("depot not found");
     let depot = lock.read().expect("depot read lock is poisoned");
 
     bldr_core::integrations::encrypt(&depot.config.key_dir, content)
@@ -57,9 +56,7 @@ pub fn validate_params(
     }
     // Check that we have origin access
     {
-        let session_id = {
-            req.extensions.get::<Authenticated>().unwrap().get_id()
-        };
+        let session_id = { req.extensions.get::<Authenticated>().unwrap().get_id() };
         if !check_origin_access(req, session_id, &res["origin"])
             .map_err(|_| status::InternalServerError)?
         {
@@ -72,6 +69,32 @@ pub fn validate_params(
         }
     }
     Ok(res)
+}
+
+pub fn fetch_origin_integrations(req: &mut Request) -> IronResult<Response> {
+    let params = match validate_params(req, &["origin"]) {
+        Ok(p) => p,
+        Err(st) => return Ok(Response::with(st)),
+    };
+    let mut request = OriginIntegrationRequest::new();
+    request.set_origin(params["origin"].clone());
+    match route_message::<OriginIntegrationRequest, OriginIntegrationResponse>(req, &request) {
+        Ok(oir) => {
+            println!("{:?}", &oir.get_integrations());
+            let integrations_response: HashMap<String, Vec<String>> = oir.get_integrations()
+                .iter()
+                .fold(HashMap::new(), |mut acc, ref i| {
+                    acc.entry(i.get_integration().to_owned())
+                        .or_insert(Vec::new())
+                        .push(i.get_name().to_owned());
+                    acc
+                });
+            let mut response = render_json(status::Ok, &integrations_response);
+            helpers::dont_cache_response(&mut response);
+            Ok(response)
+        }
+        Err(err) => Ok(render_net_error(&err)),
+    }
 }
 
 pub fn fetch_origin_integration_names(req: &mut Request) -> IronResult<Response> {

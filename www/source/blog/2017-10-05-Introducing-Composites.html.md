@@ -148,7 +148,9 @@ First, we've declared an upstream server named `backend`; this represents our No
 
 Second, we define our `server` stanza to function as a proxy to our NodeJS backend. The `listen` value is taken from our proxy application's own configuration, and is the port that the proxy will be serving requests on.
 
-Finally, note that we have set a number of `*_temp_path` variables. The current `core/nginx` packages have an `nginx` binary that was compiled with these paths rooted in `/hab/svc/nginx/var/`, which is the correct path assuming that the binary will be running as an `nginx` service. In our case, however, it'll be running as our `composite-example-api-proxy` service, so we need to set these values to paths that our service can actually write to. (While this is an interesting detail, it is not particularly germane to composites _per se_.)
+Finally, note that we have set a number of `*_temp_path` variables. The current `core/nginx` packages have an `nginx` binary that was compiled with these paths rooted in `/hab/svc/nginx/var/`, which is the correct path assuming that the binary will be running as an `nginx` service. In our case, however, it'll be running as our `composite-example-api-proxy` service, so we need to set these values to paths that our service can actually write to.
+
+(In reality, the `core/nginx` package dates from the early days of Habitat, before we knew what packaging patterns were good. Nginx should really never be running *as* an "nginx service" directly, but should instead be used as a dependency of your actual application, as illustrated here. While this is an interesting detail, it is not particularly germane to composites _per se_.)
 
 Finally, let's take a look at the `run` hook of our `composite-example-api-proxy`.
 
